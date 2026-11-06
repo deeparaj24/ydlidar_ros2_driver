@@ -155,6 +155,14 @@ int main(int argc, char *argv[]) {
   node->get_parameter("frequency", f_optvalue);
   laser.setlidaropt(LidarPropScanFrequency, &f_optvalue, sizeof(float));
 
+  /// unit: m, added to every measured range (constant offset compensation)
+  float range_offset = 0.f;
+  node->declare_parameter("range_offset", range_offset);
+  node->get_parameter("range_offset", range_offset);
+  if (range_offset != 0.f) {
+    RCLCPP_INFO_STREAM(node->get_logger(), "NON-ZERO RANGE OFFSET WAS SET: " << range_offset);
+  }
+
   bool invalid_range_is_inf = false;
   node->declare_parameter("invalid_range_is_inf", invalid_range_is_inf);
   node->get_parameter("invalid_range_is_inf", invalid_range_is_inf);
@@ -242,18 +250,19 @@ int main(int argc, char *argv[]) {
 
       for(size_t i=0; i < scan.points.size(); i++) {
         int index = std::ceil((scan.points[i].angle - scan.config.min_angle)/scan.config.angle_increment);
+        float range = scan.points[i].range + range_offset;
         if(index >=0 && index < size) {
-	  if (scan.points[i].range >= scan.config.min_range) {
-            scan_msg->ranges[index] = scan.points[i].range;
+	  if (range >= scan.config.min_range) {
+            scan_msg->ranges[index] = range;
             scan_msg->intensities[index] = scan.points[i].intensity;
 	  }
         }
 
-	if (scan.points[i].range >= scan.config.min_range &&
-             scan.points[i].range <= scan.config.max_range) {
+	if (range >= scan.config.min_range &&
+             range <= scan.config.max_range) {
           geometry_msgs::msg::Point32 point;
-          point.x = scan.points[i].range * cos(scan.points[i].angle);
-          point.y = scan.points[i].range * sin(scan.points[i].angle);
+          point.x = range * cos(scan.points[i].angle);
+          point.y = range * sin(scan.points[i].angle);
           point.z = 0.0;
           pc_msg->points.push_back(point);
           pc_msg->channels[idx_intensity].values.push_back(scan.points[i].intensity);
